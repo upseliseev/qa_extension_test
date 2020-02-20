@@ -10,6 +10,7 @@ using Skylight.Mqtt;
 using System.Threading;
 using Skylight.Api.Assignments.V1.Models;
 using Skylight.Api.Authentication.V1.Models;
+using System.Collections.Generic;
 
 namespace ExtensionTest
 {
@@ -61,7 +62,7 @@ namespace ExtensionTest
             Console.WriteLine("Enter a command: "); // tell the user they can enter a command now 
             // TODO listen for input forever, or at least until the program is stopped 
             while(true) {
-                string command = Console.ReadLine(); 
+                string command = Console.ReadLine();
                 Console.WriteLine("Got command: " + command); 
             }
         }
@@ -332,9 +333,9 @@ namespace ExtensionTest
             //Create the assignment body
             var assignment = new AssignmentNew
             {
-                Description = "This is an assignment created by the SDK Hello World.",
+                Description = "This is an assignment for testing extensions.",
                 IntegrationId = skyManager.IntegrationId, //It's important for us to specify the integrationId here, in order for us to receive events related to this assignment (like `Mark Complete`)
-                Name = "SDK Hello World Assignment " + AssignmentCount
+                Name = "Extension Test Assignment " + AssignmentCount
             };
 
             //Increment our assignment count
@@ -362,7 +363,16 @@ namespace ExtensionTest
                 ViewMode = ViewMode.Native //This is the default view mode and will generally be used
             };
 
-            // TODO create a sequence 
+            // create cards 
+            CardNew labelCard = createLabelCard("read me"); 
+            CardNew multChoiceCard = createMultipleChoiceCard("click me"); 
+            CardNew labelCard2 = createLabelCard("ignore me"); 
+            CardNew markCompleteCard = createMarkCompleteCard(); 
+
+            // add all the cards to the list of cards
+            sequence.Cards = new System.Collections.Generic.List<CardNew> {
+                labelCard, multChoiceCard, labelCard, markCompleteCard
+            }; 
             return sequence; 
         }
 
@@ -374,6 +384,33 @@ namespace ExtensionTest
                 Layout = new LayoutText(),
                 Selectable = true //We have to make sure this card is selectable so that the user can view it
             };
+        }
+
+        static CardNew createMultipleChoiceCard(string label) {
+
+            // create the choice objects 
+            Choice choice1 = new Choice(); 
+            choice1.Label = "option 1";
+            choice1.Position = 1;
+            Choice choice2 = new Choice(); 
+            choice2.Label = "option 2"; 
+            choice2.Position = 2; 
+            Choice choice3 = new Choice();
+            choice3.Label = "option 3"; 
+            choice3.Position = 3; 
+            Dictionary<String, Choice> choices = new Dictionary<String,Choice>(); 
+            choices.Add("id1", choice1);
+            choices.Add("id2", choice2); 
+            choices.Add("id3", choice3); 
+            return new CardNew {
+                Label = label, 
+                Size = 1, 
+                Layout = new LayoutText(), 
+                Selectable = true, 
+                Component = new ComponentDecision {
+                    Choices = choices 
+                }
+            }; 
         }
 
         static CardNew createPhotoCaptureCard() {
