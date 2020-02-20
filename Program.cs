@@ -1,5 +1,4 @@
-﻿
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.IO;
 using System;
 using Skylight.Client;
@@ -12,98 +11,99 @@ using System.Threading;
 using Skylight.Api.Assignments.V1.Models;
 using Skylight.Api.Authentication.V1.Models;
 
-namespace HelloWorld {
+namespace ExtensionTest
+{
+
     /*
-        INFO: Throughout this example, there are comments that begin with @skydocs -- 
-        these are tags used by the Skylight Developer Portal and are not necessary for
-        this example to function.
+        The goal of this program is to allow the testing of common extension behaviors without having to set up your own extension. 
     */
-    class Program
+
+    class Extension
     {
-        public static Manager SkyManager;
-        public static string UserId;
-        private readonly static string MARK_COMPLETE_TAG = "seq1completion"; //Tags can only be up to 20 characters long
-        private readonly static string PHOTO_CAPTURE_TAG = "seq1photo"; //Tags can only be up to 20 characters long
-        private readonly static string FILES_DIRECTORY = Path.Join(".", "tmp"); //We'll download our uploaded files to a folder called "tmp"
+        public static Manager skyManager;
+        public static string userId; // id the user we are currently working with 
+        private readonly static string FILES_DIRECTORY = Path.Join(".", "tmp"); // to be used for downloaded files 
         private static int AssignmentCount = 0;
+
         static async Task Main(string[] args)
         {
-            try {
+            try
+            {
                 //Create our manager and point it to our credentials file
                 //We leave the parameter blank, so that it looks for the `credentials.json` in the root directory.
-                SkyManager = new Manager();
-            } catch { return; }
-            
-            /* In this Hello World example, we:
-                0. Subscribe to Skylight events, to listen for `Mark Complete` events. When one of these events is detected, we'll archive that assignment and create a new one for the same user
-                1. Prompt for a username on the command line
-                    a. If a user with that username exists, prompt whether we should go ahead and use that user for the rest of this Hello World.
-                    b. If a user with that username doesn't exist, prompt for a password and then create that user.
-                2. Remove all assignments from the user.
-                3. Create a simple assignment with one sequence that has three cards, including:
-                    a. A label card that says "Hello World"
-                    b. A photo capture card that, when a photo is captured, this extension will download the photo
-                    c. A mark complete card that will emit the mark complete event when tapped, which will trigger our listener from the earlier step.
-                4. Assign the assignment to the user
-                5. Keep the program alive by using SpinWait.
-            */
-        
-            //0. Subscribe
+                skyManager = new Manager();
+            }
+            catch { return; }
+
+            //0. Subscribe to Skylight event 
             await SubscribeToSkylightEvents();
 
-            //1. Get the userId of the Hello World user based on the command prompt input
-            UserId = await GetHelloWorldUserId();
-            if (UserId == null) {
+            //1. get the user id for the user we want to test with 
+            userId = await getUserId(); 
+            if (userId == null)
+            {
                 Console.WriteLine("Exiting Skylight Hello World extension.");
                 return;
             }
 
             //2. Remove all assignments
-            await RemoveAllAssignmentsForUser(UserId);
-            
+            await removeAllAssignmentsForUser(userId);
+
             //3. Create a new assignment
             //It is important to note that this next call doesn't reach out to the servers -- the assignment information is created in one fell swoop in memory first.
-            var assignmentBody = CreateAssignment();
+            var assignmentBody = createAssignment();
 
             //4. Assign the assignment to the user
-            await AssignToUser(assignmentBody, UserId);
+            await assignToUser(assignmentBody, userId);
 
             //Let the user know that we've completed our work here and that they should continue on a device.
-            Console.WriteLine("Congratulations! Your user is now set up with a the Hello World assignment. Log in to the domain `" + SkyManager.Domain + "` using that username and password in Skylight Web to view this assignment.");
-            
-            //5. Wait forever (at least, until the program is stopped)
-            SpinWait.SpinUntil(() => false);
-
+            Console.WriteLine("Congratulations! Your user is now set up with your assignment. Log in to the domain `" + skyManager.Domain + "` using that username and password in Skylight Web to view this assignment.");
+            Console.WriteLine("Enter a command: "); // tell the user they can enter a command now 
+            // TODO listen for input forever, or at least until the program is stopped 
+            while(true) {
+                string command = Console.ReadLine(); 
+                Console.WriteLine("Got command: " + command); 
+            }
         }
 
+
+        /*
+            private helpers designed to encapsulate specific actions.
+            TODO- subscribe to skylight events  
+        */
         //In this method, we subscribe to Skylight events. In particular for this example, we're most interested in listening for the `Mark Complete` event.
-        static async Task SubscribeToSkylightEvents() {
-            SkyManager.MessagingClient.Connected += (object sender, MqttClientConnectedEventArgs args) => {
+        private static async Task SubscribeToSkylightEvents()
+        {
+            skyManager.MessagingClient.Connected += (object sender, MqttClientConnectedEventArgs args) =>
+            {
                 Console.WriteLine("Skylight MQTT client connected.");
             };
 
-            SkyManager.MessagingClient.Disconnected += (object sender, MqttClientDisconnectedEventArgs args) => {
+            skyManager.MessagingClient.Disconnected += (object sender, MqttClientDisconnectedEventArgs args) =>
+            {
                 Console.WriteLine("Skylight MQTT client disconnected.");
                 Console.WriteLine(args.Exception.Message);
             };
 
-            SkyManager.MessagingClient.TopicSubscribed += (object sender, MqttMsgSubscribedEventArgs args) => {
+            skyManager.MessagingClient.TopicSubscribed += (object sender, MqttMsgSubscribedEventArgs args) =>
+            {
                 Console.WriteLine("Skylight MQTT client subscribed to: " + args.Topic);
             };
 
-            SkyManager.MessagingClient.MessageReceived += (object sender, MessageReceivedEventArgs args) => {
+            skyManager.MessagingClient.MessageReceived += (object sender, MessageReceivedEventArgs args) =>
+            {
                 //Console.WriteLine("Skylight Message received on topic " + args.Topic + " " + args.Message); //Uncomment this for more verbose logging of Skylight event messages
             };
 
-            SkyManager.MessagingClient.CardUpdated += async (object sender, CardUpdatedEventArgs args) => { await CardUpdated(sender, args); };
+            skyManager.MessagingClient.CardUpdated += async (object sender, CardUpdatedEventArgs args) => { await onCardUpdated(sender, args); };
 
-
-            await SkyManager.StartListening();
+            await skyManager.StartListening();
         }
 
         //@skydocs.start(mqtt.cardupdated.cardtags)
         //@skydocs.start(media.download)
-        static async Task CardUpdated(object sender, CardUpdatedEventArgs args) {
+        static async Task onCardUpdated(object sender, CardUpdatedEventArgs args)
+        {
             /*
                 There are many ways we can handle this event. We could:
                 - use the cardId to determine what action to take
@@ -113,10 +113,11 @@ namespace HelloWorld {
 
                 For this example, we'll pull down the card and look at its tags (specifically, we'll make sure it has the MARK_COMPLETE_TAG tag that we used earlier)
             */
-            var result = await SkyManager.ApiClient.ExecuteRequestAsync(new Skylight.Api.Assignments.V1.CardRequests.GetCardRequest(args.AssignmentId, args.SequenceId, args.CardId));
+            var result = await skyManager.ApiClient.ExecuteRequestAsync(new Skylight.Api.Assignments.V1.CardRequests.GetCardRequest(args.AssignmentId, args.SequenceId, args.CardId));
 
             //Handle the resulting status code appropriately
-            switch(result.StatusCode) {
+            switch (result.StatusCode)
+            {
                 case System.Net.HttpStatusCode.Forbidden:
                     Console.Error.WriteLine("Error getting card: Permission forbidden.");
                     throw new Exception("Error getting card.");
@@ -135,100 +136,11 @@ namespace HelloWorld {
             }
 
             var cardInfo = result.Content;
-            if(cardInfo.Tags.Contains(MARK_COMPLETE_TAG)) {
-                //If the card's tags includes a MARK_COMPLETE_TAG, then we'll reassign the assignment
-                Console.WriteLine("Card tags contains MARK_COMPLETE_TAG");
-
-                //If the card isn't marked complete, return
-                if(!cardInfo.IsDone.HasValue || !cardInfo.IsDone.Value)return;
-                Console.WriteLine("Card is marked complete");
-
-                //Otherwise, reassign the assignment
-                await DeleteAssignment(args.AssignmentId);
-                var assignmentBody = CreateAssignment();
-                await AssignToUser(assignmentBody, UserId);
-            } else if(cardInfo.Tags.Contains(PHOTO_CAPTURE_TAG)) {
-                //If the card's tags includes a PHOTO_CAPTURE_TAG, we'll download the photo that was captured
-                var photoCaptureComponent = (ComponentCapturePhoto)cardInfo.Component;
-                Console.WriteLine(cardInfo.ToJson());
-                var photoCaptureURIs = photoCaptureComponent.Captures;
-                foreach(var photoCaptureURI in photoCaptureURIs) {
-                    await DownloadPhoto(photoCaptureURI);
-                    Console.WriteLine(photoCaptureURI);
-                }
-            }
+            // TODO describe what should be done based on the card state. for now, just print out which card was updated 
+            Console.WriteLine("Update card: " + cardInfo.AssignmentId + "/" + cardInfo.SequenceId + "/" + cardInfo.Id);
         }
         //@skydocs.end()
 
-        //@skydocs.start(media.download)
-        static async Task DownloadPhoto(string uri) { //This uri can be, for example, a URI from a capture photo component's captures field.
-            //First, get the file metadata so we have some more information about the file
-            string[] splitString = uri.Split("/");
-            var photoId = splitString[splitString.Length-2];
-            var metadataResult = await SkyManager.ApiClient.ExecuteRequestAsync(new Skylight.Api.Media.V3.FilesRequests.GetFileRequest(photoId));
-
-            //Handle the resulting status code appropriately
-            switch(metadataResult.StatusCode) {
-                case System.Net.HttpStatusCode.Forbidden:
-                    Console.Error.WriteLine("Error retrieving file metadata: Permission forbidden.");
-                    throw new Exception("Error retrieving file metadata.");
-                case System.Net.HttpStatusCode.Unauthorized:
-                    Console.Error.WriteLine("Error retrieving file metadata: Method call was unauthenticated.");
-                    throw new Exception("Error retrieving file metadata.");
-                case System.Net.HttpStatusCode.NotFound:
-                    Console.Error.WriteLine("Error retrieving file metadata: File not found.");
-                    throw new Exception("Error retrieving file metadata.");
-                case System.Net.HttpStatusCode.OK:
-                    Console.WriteLine("File metadata successfully retrieved");
-                    break;
-                default:
-                    Console.Error.WriteLine("Unhandled user creation status code: " + metadataResult.StatusCode);
-                    throw new Exception("Error retrieving file metadata.");
-            }
-
-            //Create the tmp folder if it doesn't exist
-            if(!Directory.Exists(FILES_DIRECTORY)){
-                Directory.CreateDirectory(FILES_DIRECTORY);
-            }
-
-            var photoData = metadataResult.Content;
-            var filePath = Path.Join(FILES_DIRECTORY, photoData.Filename);
-
-            //If the file exists, don't re-download
-            if(File.Exists(filePath))return;
-            var fileResult = await SkyManager.ApiClient.ExecuteRequestAsync(new Skylight.Api.Media.V3.FilesRequests.GetContentRequest(photoId));
-            
-            //Handle the resulting status code appropriately
-            switch(fileResult.StatusCode) {
-                case System.Net.HttpStatusCode.Forbidden:
-                    Console.Error.WriteLine("Error retrieving file: Permission forbidden.");
-                    throw new Exception("Error retrieving file.");
-                case System.Net.HttpStatusCode.Unauthorized:
-                    Console.Error.WriteLine("Error retrieving file: Method call was unauthenticated.");
-                    throw new Exception("Error retrieving file.");
-                case System.Net.HttpStatusCode.NotFound:
-                    Console.Error.WriteLine("Error retrieving file: File not found.");
-                    throw new Exception("Error retrieving file.");
-                case System.Net.HttpStatusCode.OK:
-                    Console.WriteLine("File successfully downloaded");
-                    break;
-                default:
-                    Console.Error.WriteLine("Unhandled user creation status code: " + metadataResult.StatusCode);
-                    throw new Exception("Error retrieving file.");
-            }
-
-            var fileBytes = fileResult.Content;
-            using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
-            {
-                fs.Write(fileBytes, 0, fileBytes.Length);
-            }
-            Console.WriteLine("Photo downloaded to folder \"" + FILES_DIRECTORY + "\".");
-            Console.WriteLine("Photo has the following tags in its metadata: ");
-            foreach(string tag in photoData.Tags) {
-                Console.WriteLine("- " + tag);
-            }
-
-        }
         //@skydocs.end()
 
         /*
@@ -236,61 +148,46 @@ namespace HelloWorld {
                 0. If the user exists, ask if we want to continue the Hello World with that user
                 1. Otherwise, prompt for a password and create the user
         */
-        static async Task<string> GetHelloWorldUserId() {
+        private static async Task<string> getUserId()
+        {
 
             Console.WriteLine("Welcome to the Skylight Hello World extension! Please enter a username to use for this Hello World:");
             string username = Console.ReadLine();
 
-            string userId = await GetUserIdForUsername(username);
-            
+            string userId = await getUserIdForUsername(username);
+
             //If userId isn't null, then that user already exists -- see if we actually want to use that user
-            if(userId != null) {
+            if (userId != null)
+            {
                 Console.WriteLine("That user currently exists in your domain. Would you like to continue this Hello World with that user? [type 'yes' or 'no']\n(IMPORTANT: This Hello World will delete all assignments from this user.)");
                 string choice = Console.ReadLine();
 
                 //Make sure the user explicitly specifies 'yes' or 'no'
-                while(!(choice.ToLower().Equals("no") || choice.ToLower().Equals("yes"))) {
+                while (!(choice.ToLower().Equals("no") || choice.ToLower().Equals("yes")))
+                {
                     Console.WriteLine("Please type 'yes' or 'no'.");
                     choice = Console.ReadLine();
                 }
-                if(choice.ToLower().Equals("no"))return null;
+                if (choice.ToLower().Equals("no")) return null;
                 return userId;
             }
 
             //Otherwise, prompt for a password and create the user
-            string password = GetPassword();
-            await CreateUser("Hello", "World", Role.User, username, password);
-            userId = await GetUserIdForUsername(username);
-            
+            string password = getPassword();
+            await createUser("Hello", "World", Role.User, username, password);
+            userId = await getUserIdForUsername(username);
+
             //At this point, if userId is still null, we've thrown an exception.
             return userId;
         }
 
-        //This code was pulled in from: https://social.msdn.microsoft.com/Forums/vstudio/en-US/455eefeb-7624-4d81-b921-30f19891b2a7/any-way-to-prompt-user-for-a-password-and-then-hide-it?forum=csharpgeneral
-        static string GetPassword() { 
-            Console.WriteLine(); 
-            Console.Write("Enter desired password for this user: "); 
-
-            string password = string.Empty; 
-
-            ConsoleKeyInfo keyInfo = Console.ReadKey(true); 
-            while (keyInfo.Key != ConsoleKey.Enter) { 
-                Console.Write("*"); 
-                password += keyInfo.KeyChar; 
-                keyInfo = Console.ReadKey(true); 
-            } 
-            Console.Write("\n");
-
-            return password; 
-        } 
-        
-        //As the name suggests, this method will get the user ID for a given username -- or will return null, if the user doesn't exist
-        static async Task<string> GetUserIdForUsername(string username) {
+         //As the name suggests, this method will get the user ID for a given username -- or will return null, if the user doesn't exist
+        private static async Task<string> getUserIdForUsername(string username) {
             //Create an API request for retrieving all users
             var getUsersRequest = new Skylight.Api.Authentication.V1.UsersRequests.GetUsersRequest();
 
             //Execute the API request
-            var result = await SkyManager.ApiClient.ExecuteRequestAsync(getUsersRequest);
+            var result = await skyManager.ApiClient.ExecuteRequestAsync(getUsersRequest);
 
             //Handle the resulting status code appropriately
             switch(result.StatusCode) {
@@ -316,7 +213,24 @@ namespace HelloWorld {
             return null;
         }
 
-        static async Task CreateUser(string first, string last, Role role, string username, string password) {
+        //This code was pulled in from: https://social.msdn.microsoft.com/Forums/vstudio/en-US/455eefeb-7624-4d81-b921-30f19891b2a7/any-way-to-prompt-user-for-a-password-and-then-hide-it?forum=csharpgeneral
+        private static string getPassword() { 
+            Console.WriteLine(); 
+            Console.Write("Enter desired password for this user: "); 
+
+            string password = string.Empty; 
+
+            ConsoleKeyInfo keyInfo = Console.ReadKey(true); 
+            while (keyInfo.Key != ConsoleKey.Enter) { 
+                Console.Write("*"); 
+                password += keyInfo.KeyChar; 
+                keyInfo = Console.ReadKey(true); 
+            } 
+            Console.Write("\n");
+
+            return password; 
+        } 
+        static async Task createUser(string first, string last, Role role, string username, string password) {
             //This is the body of information we use to create a new user
             var newUserBody = new Skylight.Api.Authentication.V1.Models.UserNew
             {
@@ -331,7 +245,7 @@ namespace HelloWorld {
             var createUserRequest = new Skylight.Api.Authentication.V1.UsersRequests.CreateUserRequest(newUserBody);
 
             //Execute the request
-            var result = await SkyManager.ApiClient.ExecuteRequestAsync(createUserRequest);
+            var result = await skyManager.ApiClient.ExecuteRequestAsync(createUserRequest);
 
             //Handle the resulting status code appropriately
             switch(result.StatusCode) {
@@ -349,14 +263,14 @@ namespace HelloWorld {
                     throw new Exception("Error creating user.");
             }
         }
-        
-        static async Task RemoveAllAssignmentsForUser(string userId) {
+
+    static async Task removeAllAssignmentsForUser(string userId) {
             //First, get a list of all the user's assignments.
             var assignmentsRequest = new Skylight.Api.Assignments.V1.AssignmentRequests.GetAssignmentsRequest();
             //Make sure we only get assignments for our user
             assignmentsRequest.AddUserIdsQuery(userId);
 
-            var result = await SkyManager.ApiClient.ExecuteRequestAsync(assignmentsRequest);
+            var result = await skyManager.ApiClient.ExecuteRequestAsync(assignmentsRequest);
             
             //Handle the resulting status code appropriately
             switch(result.StatusCode) {
@@ -390,7 +304,7 @@ namespace HelloWorld {
                 Otherwise the default action will be for the assignment to be archived.
             */
             deleteRequestBody.AddPurgeQuery(shouldPurge);
-            var result = await SkyManager.ApiClient.ExecuteRequestAsync(deleteRequestBody);
+            var result = await skyManager.ApiClient.ExecuteRequestAsync(deleteRequestBody);
             
             //Handle the resulting status code appropriately
             switch(result.StatusCode) {
@@ -413,20 +327,20 @@ namespace HelloWorld {
         }
         //@skydocs.end()
 
-        static AssignmentNew CreateAssignment() {
+        static AssignmentNew createAssignment() {
 
             //Create the assignment body
             var assignment = new AssignmentNew
             {
                 Description = "This is an assignment created by the SDK Hello World.",
-                IntegrationId = SkyManager.IntegrationId, //It's important for us to specify the integrationId here, in order for us to receive events related to this assignment (like `Mark Complete`)
+                IntegrationId = skyManager.IntegrationId, //It's important for us to specify the integrationId here, in order for us to receive events related to this assignment (like `Mark Complete`)
                 Name = "SDK Hello World Assignment " + AssignmentCount
             };
 
             //Increment our assignment count
             AssignmentCount += 1;
             
-            var sequence = CreateSequence();
+            var sequence = createSequence();
 
             //Add the sequence to the assignment. If we had more sequences, we would add them here.
             assignment.Sequences = new System.Collections.Generic.List<SequenceNew>
@@ -440,7 +354,7 @@ namespace HelloWorld {
             return assignment;
         }
         
-        static SequenceNew CreateSequence() {
+        static SequenceNew createSequence() {
             
             var sequence = new SequenceNew
             {
@@ -448,45 +362,11 @@ namespace HelloWorld {
                 ViewMode = ViewMode.Native //This is the default view mode and will generally be used
             };
 
-            CardNew labelHelloCard = CreateLabelCard("Hello World");
-            labelHelloCard.Position = 1;
-            labelHelloCard.Id = "card1"; //This could be a UUID -- as long as it's unique within the sequence, we're good
-            
-            //@skydocs.start(cards.tags)
-            CardNew photoCaptureCard = CreatePhotoCaptureCard();
-            photoCaptureCard.Position = 2;
-            photoCaptureCard.Id = "card2";
-
-            //We'll add a tag to the photo capture card so we can identify it when we handle the card updated event
-            //An IMPORTANT NOTE is that any tags on this photo capture card will be added to any photos captured by this card, in the photo's metadata
-            photoCaptureCard.Tags = new System.Collections.Generic.List<string>
-            {
-                PHOTO_CAPTURE_TAG
-            };
-
-            CardNew markCompleteCard = CreateMarkCompleteCard();
-            markCompleteCard.Position = 3;
-            markCompleteCard.Id = "card3";
-
-            //We'll add a tag to the mark complete card so we can look for it later when we handle the event
-            markCompleteCard.Tags = new System.Collections.Generic.List<string> 
-            {
-                MARK_COMPLETE_TAG
-            };
-            //@skydocs.end()
-
-            //Set the cards to live in the sequence. We could create more cards and add them in a similar manner
-            sequence.Cards = new System.Collections.Generic.List<CardNew>
-            {
-                labelHelloCard
-                , photoCaptureCard
-                , markCompleteCard
-            };
-
-            return sequence;
+            // TODO create a sequence 
+            return sequence; 
         }
 
-        static CardNew CreateLabelCard(string label) {
+        static CardNew createLabelCard(string label) {
             return new CardNew
             {
                 Label = label,
@@ -496,7 +376,7 @@ namespace HelloWorld {
             };
         }
 
-        static CardNew CreatePhotoCaptureCard() {
+        static CardNew createPhotoCaptureCard() {
             return new CardNew
             {
                 Label = "Take Photo",
@@ -510,7 +390,7 @@ namespace HelloWorld {
             };
         }
 
-        static CardNew CreateMarkCompleteCard() {
+        static CardNew createMarkCompleteCard() {
             return new CardNew
             {
                 Label = "Mark Complete",
@@ -527,7 +407,7 @@ namespace HelloWorld {
             };
         }
         
-        static async Task AssignToUser(AssignmentNew assignment, string userId) {
+        static async Task assignToUser(AssignmentNew assignment, string userId) {
             //Set the assignment's user
             assignment.AssignedTo = userId;
 
@@ -535,7 +415,7 @@ namespace HelloWorld {
             var request = new Skylight.Api.Assignments.V1.AssignmentRequests.CreateAssignmentRequest(assignment);
 
             //Now, the magic happens -- we make a single API call to create this assignment, sequences/cards and all.
-            var result = await SkyManager.ApiClient.ExecuteRequestAsync(request);
+            var result = await skyManager.ApiClient.ExecuteRequestAsync(request);
             
             //Handle the resulting status code appropriately
             switch(result.StatusCode) {
@@ -554,5 +434,4 @@ namespace HelloWorld {
             }
         }
     }
-
 }
