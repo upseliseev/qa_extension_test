@@ -25,6 +25,7 @@ namespace ExtensionTest
         public static string userId; // id the user we are currently working with 
         private readonly static string FILES_DIRECTORY = Path.Join(".", "tmp"); // to be used for downloaded files 
         private static int AssignmentCount = 0;
+        private static Assignment assign; 
 
         static async Task Main(string[] args)
         {
@@ -64,9 +65,73 @@ namespace ExtensionTest
             while(true) {
                 string command = Console.ReadLine();
                 Console.WriteLine("Got command: " + command); 
+                await processCommand(command);
             }
         }
 
+        private static async Task processCommand(string command) {
+            // if the command is reorder, then there are no other parameters. 
+            // we should randomly switch two items in the root sequence, and update the assignment accordingly 
+            if(command.Equals("reorder")) {
+                await reorderAndPatchAssignment(); 
+            } else {
+                Console.WriteLine("Got unknown command " + command +". Please try again with a valid command."); 
+            }
+        }
+
+        /* switches positions of two random items in the root sequence of our current assignment, and patches the two card changes to 
+           the backend so we immediately see the changes 
+         */ 
+        private static async Task reorderAndPatchAssignment() {
+            var getSeqReq = new Skylight.Api.Assignments.V1.SequenceRequests.GetSequenceRequest(assign.Id, assign.RootSequence); 
+            var seqResult = await skyManager.ApiClient.ExecuteRequestAsync(getSeqReq);
+            Sequence rootSeq = seqResult.Content; 
+            var cardsReq = new Skylight.Api.Assignments.V1.CardRequests.GetSequenceCardsRequest(assign.Id, assign.RootSequence); 
+            var cardsResult =  await skyManager.ApiClient.ExecuteRequestAsync(cardsReq);  
+            List<Card> cards = cardsResult.Content; 
+            // sort by position so we can just directly modify the cards we need 
+            cards.Sort(delegate(Card a, Card b){
+                if(a.Position == null && b.Position == null) return 0; 
+                else if (a.Position == null) return -1;
+                else if(b.Position == null) return 1; 
+                else if(a.Position < b.Position) return -1; 
+                else if (a.Position > b.Position) return 1;
+                else return 0; 
+            });
+
+            Random random = new Random(); 
+            Int32 index1;
+            Int32 index2;
+            // looped to make sure we don't get the same value for both indices, since such a switch is not informative 
+            // and does not benefit anyone, and is mostly a test of this extension than of the client 
+            do {
+                index1 = random.Next(cards.Count); 
+                index2 = random.Next(cards.Count); 
+            } while (index1 == index2); 
+
+            // prints out the positions of the cards, as they would appear in the footer on HUD. 
+            Console.WriteLine("Switching cards at positions " + index1 + " and " + index2); 
+
+            // do the switcharoo 
+            decimal? card1Pos = cards[index1].Position; 
+            decimal? card2Pos = cards[index2].Position; 
+            //flip the cards actual position fields, since that's what should determine what the order is client-side. 
+            // if that doesnt happen then that is a client-side bug
+            cards[index1].Position = card2Pos;
+            cards[index2].Position = card1Pos; 
+
+            // now we want to patch the changes to the new cards
+            Dictionary<string, object> card1Changes = new Dictionary<string, object>(); 
+            card1Changes.Add("position", cards[index1].Position); 
+            var patchCard1Req = new Skylight.Api.Assignments.V1.CardRequests.PatchCardRequest(card1Changes, cards[index1].AssignmentId, cards[index1].SequenceId, cards[index1].Id); 
+
+            Dictionary<string, object> card2Changes = new Dictionary<string, object>(); 
+            card2Changes.Add("position", cards[index2].Position); 
+            var patchCard2Req = new Skylight.Api.Assignments.V1.CardRequests.PatchCardRequest(card2Changes, cards[index2].AssignmentId, cards[index2].SequenceId, cards[index2].Id); 
+
+            await skyManager.ApiClient.ExecuteRequestAsync(patchCard1Req); 
+            await skyManager.ApiClient.ExecuteRequestAsync(patchCard2Req); 
+        }
 
         /*
             private helpers designed to encapsulate specific actions.
@@ -152,7 +217,7 @@ namespace ExtensionTest
         private static async Task<string> getUserId()
         {
 
-            Console.WriteLine("Welcome to the Skylight Hello World extension! Please enter a username to use for this Hello World:");
+            Console.WriteLine("Welcome to the Skylight Test extension! Please enter a username to use for this extension:");
             string username = Console.ReadLine();
 
             string userId = await getUserIdForUsername(username);
@@ -160,7 +225,7 @@ namespace ExtensionTest
             //If userId isn't null, then that user already exists -- see if we actually want to use that user
             if (userId != null)
             {
-                Console.WriteLine("That user currently exists in your domain. Would you like to continue this Hello World with that user? [type 'yes' or 'no']\n(IMPORTANT: This Hello World will delete all assignments from this user.)");
+                Console.WriteLine("That user currently exists in your domain. Would you like to continue this extension with that user? [type 'yes' or 'no']\n(IMPORTANT: This extension will delete all assignments from this user.)");
                 string choice = Console.ReadLine();
 
                 //Make sure the user explicitly specifies 'yes' or 'no'
@@ -175,7 +240,7 @@ namespace ExtensionTest
 
             //Otherwise, prompt for a password and create the user
             string password = getPassword();
-            await createUser("Hello", "World", Role.User, username, password);
+            await createUser("Extension", "Test", Role.User, username, password);
             userId = await getUserIdForUsername(username);
 
             //At this point, if userId is still null, we've thrown an exception.
@@ -364,14 +429,20 @@ namespace ExtensionTest
             };
 
             // create cards 
-            CardNew labelCard = createLabelCard("read me"); 
+            CardNew labelCard = createLabelCard("read me");
             CardNew multChoiceCard = createMultipleChoiceCard("click me"); 
             CardNew labelCard2 = createLabelCard("ignore me"); 
             CardNew markCompleteCard = createMarkCompleteCard(); 
 
+            // set positions 
+            labelCard.Position = 1; 
+            multChoiceCard.Position = 2; 
+            labelCard2.Position = 3; 
+            markCompleteCard.Position = 4; 
+
             // add all the cards to the list of cards
             sequence.Cards = new System.Collections.Generic.List<CardNew> {
-                labelCard, multChoiceCard, labelCard, markCompleteCard
+                labelCard, multChoiceCard, labelCard2, markCompleteCard
             }; 
             return sequence; 
         }
@@ -453,6 +524,7 @@ namespace ExtensionTest
 
             //Now, the magic happens -- we make a single API call to create this assignment, sequences/cards and all.
             var result = await skyManager.ApiClient.ExecuteRequestAsync(request);
+            assign = result.Content; 
             
             //Handle the resulting status code appropriately
             switch(result.StatusCode) {
