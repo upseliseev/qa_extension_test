@@ -74,6 +74,8 @@ namespace ExtensionTest
             // we should randomly switch two items in the root sequence, and update the assignment accordingly 
             if(command.Equals("reorder")) {
                 await reorderAndPatchAssignment(); 
+            } else if (command.Contains("update")) {
+                await updateAndPatchCard(command); 
             } else {
                 Console.WriteLine("Got unknown command " + command +". Please try again with a valid command."); 
             }
@@ -131,6 +133,110 @@ namespace ExtensionTest
 
             await skyManager.ApiClient.ExecuteRequestAsync(patchCard1Req); 
             await skyManager.ApiClient.ExecuteRequestAsync(patchCard2Req); 
+        }
+
+        private static async Task updateAndPatchCard(string command) {
+            string[] commandInfoList = command.Split("--"); // split based on the options   
+
+            string cardToUpdate = commandInfoList[0]; 
+            if(cardToUpdate.Length != 2) {
+                Console.Error.WriteLine("Did not get correctly formatted required update information. Please verify your command and try again"); 
+                return; 
+            }
+            Int32 cardPos = Int32.Parse(cardToUpdate.Split(" ")[1]); 
+
+            var getSeqReq = new Skylight.Api.Assignments.V1.SequenceRequests.GetSequenceRequest(assign.Id, assign.RootSequence); 
+            var seqResult = await skyManager.ApiClient.ExecuteRequestAsync(getSeqReq);
+            Sequence rootSeq = seqResult.Content; 
+            var cardsReq = new Skylight.Api.Assignments.V1.CardRequests.GetSequenceCardsRequest(assign.Id, assign.RootSequence); 
+            var cardsResult =  await skyManager.ApiClient.ExecuteRequestAsync(cardsReq);  
+            List<Card> cards = cardsResult.Content; 
+            Card card = cards[cardPos];
+
+            Dictionary<string, object> cardChanges = new Dictionary<string, object>(); 
+                    
+            // go through the provided options and make the appropriate changes 
+            for (int i= 1; i < commandInfoList.Length; i++) {
+                String[] optionDetails = commandInfoList[i].Split(" "); 
+                if(optionDetails.Length != 2) {
+                    Console.WriteLine("One of the options either is missing or has unexpected data. Please try again");
+                    return; 
+                }
+                string option = optionDetails[0];
+                string newValue = optionDetails[1]; 
+            
+                if(option.Equals("selectable")) {
+                    Boolean newBool = false; 
+                    if(Boolean.TryParse(newValue, out newBool)) {
+                        cardChanges["selectable"] = newBool; 
+                    } else {
+                        Console.WriteLine("Invalid new value for option selectable"); 
+                        return; 
+                    }
+                } else if (option.Equals("label")) {
+                    cardChanges["label"] = newValue; 
+                } else if (option.Equals("subdued")) {
+                    Boolean newBool = false; 
+                    if(Boolean.TryParse(newValue, out newBool)) {
+                        cardChanges["subdued"] = newBool; 
+                    } else {
+                        Console.WriteLine("Invalid new value for option subdued"); 
+                        return; 
+                    }
+                } else if (option.Equals("position")) {
+                    Decimal newPos = 0; 
+                    if(Decimal.TryParse(newValue, out newPos)) {
+                        cardChanges["position"] = newPos; 
+                    } else {
+                        Console.WriteLine("Invalid new value for option position"); 
+                        return; 
+                    }
+                } else if (option.Equals("component")) {
+                    Component newComp; 
+                    if(newValue.Equals("openSequence")) {
+                        newComp = new ComponentOpenSequence(); 
+                    } else if (newValue.Equals("default")) {
+                        newComp = new ComponentDefault(); 
+                    } else if (newValue.Equals("calling")) {
+                        newComp = new ComponentCalling(); 
+                    } else if (newValue.Equals("completion")) {
+                        newComp = new ComponentCompletion(); 
+                    } else if (newValue.Equals("imageCapture")) {
+                        newComp = new ComponentCapturePhoto(); 
+                    } else if (newValue.Equals("videoCapture")) {
+                        newComp = new ComponentCaptureVideo(); 
+                    } else if(newValue.Equals("audioCapture")) {
+                        newComp = new ComponentCaptureAudio(); 
+                    } else if (newValue.Equals("multipleChoice")) {
+                                    // create the choice objects 
+                        Choice choice1 = new Choice(); 
+                        choice1.Label = "option 1";
+                        choice1.Position = 1;
+                        Choice choice2 = new Choice(); 
+                        choice2.Label = "option 2"; 
+                        choice2.Position = 2; 
+                        Choice choice3 = new Choice();
+                        choice3.Label = "option 3"; 
+                        choice3.Position = 3; 
+                        Dictionary<String, Choice> choices = new Dictionary<String,Choice>(); 
+                        choices.Add("id1", choice1);
+                        choices.Add("id2", choice2); 
+                        choices.Add("id3", choice3); 
+                        ComponentDecision component = new ComponentDecision(); 
+                        component.Choices = choices; 
+                        newComp = component;  
+                    } else if (newValue.Equals("scanning")) {
+                        newComp = new ComponentScanning(); 
+                    } else {
+                        Console.Error.WriteLine("Tried to add an invalid component type. Please try again."); 
+                        return; 
+                    }
+                    cardChanges["component"] = newComp;  
+                }
+            }
+
+            var patchCardReq = new Skylight.Api.Assignments.V1.CardRequests.PatchCardRequest(cardChanges, card.AssignmentId, card.SequenceId, card.Id);    
+            await skyManager.ApiClient.ExecuteRequestAsync(patchCardReq); 
         }
 
         /*
