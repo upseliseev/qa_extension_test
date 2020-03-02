@@ -138,12 +138,16 @@ namespace ExtensionTest
         private static async Task updateAndPatchCard(string command) {
             string[] commandInfoList = command.Split("--"); // split based on the options   
 
-            string cardToUpdate = commandInfoList[0]; 
-            if(cardToUpdate.Length != 2) {
-                Console.Error.WriteLine("Did not get correctly formatted required update information. Please verify your command and try again"); 
+            string[] cardToUpdateData = commandInfoList[0].Split(" "); 
+            if(cardToUpdateData.Length < 2 || cardToUpdateData.Length > 3) {
+                Console.Error.WriteLine("Did not get correctly formatted required update information. Please verify your command and try again."); 
                 return; 
             }
-            Int32 cardPos = Int32.Parse(cardToUpdate.Split(" ")[1]); 
+            if(commandInfoList.Length < 2) {
+                Console.Error.WriteLine("No options specified. Please try again with at least one option"); 
+                return; 
+            }
+            Int32 cardPos = Int32.Parse(cardToUpdateData[1]); 
 
             var getSeqReq = new Skylight.Api.Assignments.V1.SequenceRequests.GetSequenceRequest(assign.Id, assign.RootSequence); 
             var seqResult = await skyManager.ApiClient.ExecuteRequestAsync(getSeqReq);
@@ -157,11 +161,13 @@ namespace ExtensionTest
                     
             // go through the provided options and make the appropriate changes 
             for (int i= 1; i < commandInfoList.Length; i++) {
+                Console.WriteLine("Processing command: " + commandInfoList[i]); 
                 String[] optionDetails = commandInfoList[i].Split(" "); 
-                if(optionDetails.Length != 2) {
-                    Console.WriteLine("One of the options either is missing or has unexpected data. Please try again");
-                    return; 
+
+                if(optionDetails.Length < 2) {
+                    Console.Error.WriteLine("Missing information in at least one option"); 
                 }
+
                 string option = optionDetails[0];
                 string newValue = optionDetails[1]; 
             
@@ -174,7 +180,8 @@ namespace ExtensionTest
                         return; 
                     }
                 } else if (option.Equals("label")) {
-                    cardChanges["label"] = newValue; 
+                    string actualString = commandInfoList[i].Split(option)[1]; 
+                    cardChanges["label"] = actualString.Trim(); 
                 } else if (option.Equals("subdued")) {
                     Boolean newBool = false; 
                     if(Boolean.TryParse(newValue, out newBool)) {
@@ -207,7 +214,7 @@ namespace ExtensionTest
                         newComp = new ComponentCaptureVideo(); 
                     } else if(newValue.Equals("audioCapture")) {
                         newComp = new ComponentCaptureAudio(); 
-                    } else if (newValue.Equals("multipleChoice")) {
+                    } else if (newValue.Equals("decision")) {
                                     // create the choice objects 
                         Choice choice1 = new Choice(); 
                         choice1.Label = "option 1";

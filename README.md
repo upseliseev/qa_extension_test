@@ -8,7 +8,7 @@ Below is a list of the supported commands, as well as their effect:
 - update [index of item in the recycler view list]. 
 	- Options: 
 		- --selectable [isSelectable]- update whether or not the card is selectable 
-		- --label [new label]- update the card's label  
+		- --label [new label]- update the card's label. using quotation marks here
 		- --subdued [isSubdued] - update whether or not the card should appear subdued 
 		- --component [type] - update the card with the default version of the specified component 
 			- available components: 
@@ -20,6 +20,7 @@ Below is a list of the supported commands, as well as their effect:
 				- videoCapture
 				- audioCapture
 				- decision
+				- scanning
 				
 		- --position [new position] - update the position field of the card 
 		Example: to update the second card in a sequence to be selectable, the command would look like this: `update 1 --selectable true`.
