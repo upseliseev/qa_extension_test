@@ -48,9 +48,6 @@ namespace ExtensionTest
                 return;
             }
 
-            //2. Remove all assignments
-            await removeAllAssignmentsForUser(userId);
-
             //3. Create a new assignment
             //It is important to note that this next call doesn't reach out to the servers -- the assignment information is created in one fell swoop in memory first.
             var assignmentBody = createAssignment();
@@ -442,69 +439,6 @@ namespace ExtensionTest
                     throw new Exception("Error creating user.");
             }
         }
-
-    static async Task removeAllAssignmentsForUser(string userId) {
-            //First, get a list of all the user's assignments.
-            var assignmentsRequest = new Skylight.Api.Assignments.V1.AssignmentRequests.GetAssignmentsRequest();
-            //Make sure we only get assignments for our user
-            assignmentsRequest.AddUserIdsQuery(userId);
-
-            var result = await skyManager.ApiClient.ExecuteRequestAsync(assignmentsRequest);
-            
-            //Handle the resulting status code appropriately
-            switch(result.StatusCode) {
-                case System.Net.HttpStatusCode.Forbidden:
-                    Console.Error.WriteLine("Error retrieving assignments for user: Permission forbidden.");
-                    throw new Exception("Error retrieving assignments for user.");
-                case System.Net.HttpStatusCode.Unauthorized:
-                    Console.Error.WriteLine("Error retrieving assignments for user: Method call was unauthenticated.");
-                    throw new Exception("Error retrieving assignments for user.");
-                case System.Net.HttpStatusCode.NotFound:
-                    Console.Error.WriteLine("Error retrieving assignments for user: User not found.");
-                    throw new Exception("Error retrieving assignments for user.");
-                case System.Net.HttpStatusCode.OK:
-                    Console.WriteLine("User assignments successfully retrieved");
-                    break;
-                default:
-                    Console.Error.WriteLine("Unhandled user creation status code: " + result.StatusCode);
-                    throw new Exception("Error retrieving assignments for user.");
-            }
-
-            foreach(var assignment in result.Content) {
-                await DeleteAssignment(assignment.Id);
-            }
-        }
-
-        //@skydocs.start(assignments.delete)
-        static async Task DeleteAssignment(string assignmentId, bool shouldPurge = false) {
-            var deleteRequestBody = new Skylight.Api.Assignments.V1.AssignmentRequests.DeleteAssignmentRequest(assignmentId);
-            /*
-                This next line is optional. If the purge parameter is added and is set to true, the assignment will be purged forever.
-                Otherwise the default action will be for the assignment to be archived.
-            */
-            deleteRequestBody.AddPurgeQuery(shouldPurge);
-            var result = await skyManager.ApiClient.ExecuteRequestAsync(deleteRequestBody);
-            
-            //Handle the resulting status code appropriately
-            switch(result.StatusCode) {
-                case System.Net.HttpStatusCode.Forbidden:
-                    Console.Error.WriteLine("Error deleting assignment: Permission forbidden.");
-                    throw new Exception("Error deleting assignment.");
-                case System.Net.HttpStatusCode.Unauthorized:
-                    Console.Error.WriteLine("Error deleting assignment: Method call was unauthenticated.");
-                    throw new Exception("Error deleting assignment.");
-                case System.Net.HttpStatusCode.NotFound:
-                    Console.Error.WriteLine("Error deleting assignment: Assignment not found.");
-                    throw new Exception("Error deleting assignment.");
-                case System.Net.HttpStatusCode.OK:
-                    Console.WriteLine("Assignment successfully deleted");
-                    break;
-                default:
-                    Console.Error.WriteLine("Unhandled user creation status code: " + result.StatusCode);
-                    throw new Exception("Error deleting assignment.");
-            }
-        }
-        //@skydocs.end()
 
         static AssignmentNew createAssignment() {
 
